@@ -27,8 +27,9 @@ jobs:
         run: python weather_air_quality.py
 
       - name: Upload CSV artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: weather-data
           path: weather_air_quality.csv
           if-no-files-found: error
+
