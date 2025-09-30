@@ -1,23 +1,23 @@
 import requests
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# Lấy API Key từ biến môi trường (được set trong GitHub Secrets)
+# 🔑 Lấy API Key từ biến môi trường (được set trong GitHub Secrets)
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 if not API_KEY:
     raise ValueError("❌ OPENWEATHER_API_KEY chưa được thiết lập trong môi trường!")
 
-# Thành phố và tọa độ
+# 🌍 Thành phố và tọa độ
 CITIES = {
     "Hanoi": {"lat": 21.0285, "lon": 105.8542},
     "Danang": {"lat": 16.0544, "lon": 108.2022},
 }
 
-# Tên file CSV
+# 📂 Tên file CSV
 CSV_FILE = "weather_air_quality.csv"
 
-# Hàm lấy dữ liệu thời tiết
+# 📡 Hàm lấy dữ liệu thời tiết
 def get_weather(lat, lon):
     try:
         url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
@@ -33,7 +33,7 @@ def get_weather(lat, lon):
     except Exception:
         return {"temp": "N/A", "humidity": "N/A", "weather": "N/A", "wind_speed": "N/A"}
 
-# Hàm lấy dữ liệu chất lượng không khí
+# 📡 Hàm lấy dữ liệu chất lượng không khí
 def get_air_quality(lat, lon):
     try:
         url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={API_KEY}"
@@ -54,9 +54,10 @@ def get_air_quality(lat, lon):
         return {"aqi": "N/A", "co": "N/A", "no": "N/A", "no2": "N/A", "o3": "N/A",
                 "so2": "N/A", "pm2_5": "N/A", "pm10": "N/A"}
 
-# Crawl và lưu dữ liệu
+# 📝 Hàm crawl và lưu dữ liệu
 def crawl_and_save():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Lấy thời gian hiện tại theo múi giờ Việt Nam (UTC+7)
+    timestamp = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
 
     # Nếu file chưa có thì thêm header
     try:
@@ -84,7 +85,7 @@ def crawl_and_save():
             ]
             writer.writerow(row)
 
-        # Thêm 1 dòng trống sau mỗi lần crawl
+        # Thêm 1 dòng trống sau mỗi lần crawl để tách dữ liệu
         writer.writerow([])
 
 if __name__ == "__main__":
