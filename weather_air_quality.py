@@ -3,18 +3,15 @@ import csv
 import os
 from datetime import datetime
 
-# Lấy API Key từ biến môi trường (set trong GitHub Secrets)
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 if not API_KEY:
     raise ValueError("❌ OPENWEATHER_API_KEY chưa được thiết lập trong môi trường!")
 
-# Thành phố và tọa độ
 CITIES = {
     "Hanoi": {"lat": 21.0285, "lon": 105.8542},
     "Danang": {"lat": 16.0544, "lon": 108.2022},
 }
 
-# Tên file CSV
 CSV_FILE = "weather_air_quality.csv"
 
 def get_weather(lat, lon):
@@ -25,57 +22,31 @@ def get_weather(lat, lon):
     return {
         "temp": data["main"]["temp"],
         "humidity": data["main"]["humidity"],
-        "weather": data["weather"][0]["main"],
-        "wind_speed": data["wind"]["speed"],
+        "aqi": data["main"].get("aqi", "N/A"),  # Một số gói API miễn phí không có AQI
+        "weather": data["weather"][0]["description"],
     }
 
-def get_air_quality(lat, lon):
-    url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={API_KEY}"
-    res = requests.get(url)
-    res.raise_for_status()
-    data = res.json()["list"][0]
-    return {
-        "aqi": data["main"]["aqi"],
-        "co": data["components"]["co"],
-        "no": data["components"]["no"],
-        "no2": data["components"]["no2"],
-        "o3": data["components"]["o3"],
-        "so2": data["components"]["so2"],
-        "pm2_5": data["components"]["pm2_5"],
-        "pm10": data["components"]["pm10"],
-    }
+def write_csv():
+    file_exists = os.path.isfile(CSV_FILE)
 
-def crawl_and_save():
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(CSV_FILE, mode="a", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
 
-    # Nếu file chưa tồn tại thì ghi header
-    try:
-        with open(CSV_FILE, "x", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "timestamp", "city", "temp", "humidity", "weather", "wind_speed",
-                "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
-            ])
-    except FileExistsError:
-        pass
+        # Nếu file chưa tồn tại, viết header
+        if not file_exists:
+            writer.writerow(["datetime", "city", "temp", "humidity", "aqi", "weather"])
 
-    # Ghi dữ liệu cho 2 thành phố
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
+        # Ghi dữ liệu cho từng thành phố
         for city, coords in CITIES.items():
             weather = get_weather(coords["lat"], coords["lon"])
-            air = get_air_quality(coords["lat"], coords["lon"])
-            row = [
-                timestamp, city,
-                weather["temp"], weather["humidity"], weather["weather"], weather["wind_speed"],
-                air["aqi"], air["co"], air["no"], air["no2"], air["o3"],
-                air["so2"], air["pm2_5"], air["pm10"]
-            ]
-            writer.writerow(row)
-
-        # Chèn 1 dòng trống sau mỗi lần crawl
-        writer.writerow([])
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                city,
+                weather["temp"],
+                weather["humidity"],
+                weather["aqi"],
+                weather["weather"]
+            ])
 
 if __name__ == "__main__":
-    crawl_and_save()
-    print("✅ Dữ liệu đã được lưu vào", CSV_FILE)
+    write_csv()
