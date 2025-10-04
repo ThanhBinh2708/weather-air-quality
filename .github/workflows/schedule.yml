@@ -3,7 +3,7 @@ name: Weather Data Crawl
 on:
   schedule:
     - cron: "0 */2 * * *"   # chạy mỗi 2 giờ
-  workflow_dispatch:
+  workflow_dispatch:        # có thể chạy thủ công từ GitHub
 
 jobs:
   crawl:
@@ -28,7 +28,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: weather-data
-          path: weather_air_quality.csv   # file CSV của bạn
+          path: weather_air_quality.csv
 
       - name: Delete old CSV after upload
         run: rm -f weather_air_quality.csv
