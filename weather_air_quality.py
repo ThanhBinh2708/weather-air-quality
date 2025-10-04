@@ -3,7 +3,7 @@ import csv
 import os
 from datetime import datetime, timedelta
 
-# 🔑 Lấy API Key từ biến môi trường (được set trong GitHub Secrets)
+# 🔑 Lấy API Key từ biến môi trường (set trong GitHub Secrets)
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 if not API_KEY:
     raise ValueError("❌ OPENWEATHER_API_KEY chưa được thiết lập trong môi trường!")
@@ -13,9 +13,6 @@ CITIES = {
     "Hanoi": {"lat": 21.0285, "lon": 105.8542},
     "Danang": {"lat": 16.0544, "lon": 108.2022},
 }
-
-# 📂 Tên file CSV
-CSV_FILE = "weather_air_quality.csv"
 
 # 📡 Hàm lấy dữ liệu thời tiết
 def get_weather(lat, lon):
@@ -56,23 +53,25 @@ def get_air_quality(lat, lon):
 
 # 📝 Hàm crawl và lưu dữ liệu
 def crawl_and_save():
-    # Lấy thời gian hiện tại theo múi giờ Việt Nam (UTC+7)
-    timestamp = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
+    # Thời gian hiện tại (theo giờ VN)
+    now = datetime.utcnow() + timedelta(hours=7)
+    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
-    # Nếu file chưa có thì thêm header
-    try:
-        with open(CSV_FILE, "x", newline="", encoding="utf-8") as f:
+    # 📂 File lưu theo ngày
+    file_name = f"weather_air_quality_{now.strftime('%Y-%m-%d')}.csv"
+
+    # Nếu file chưa tồn tại → tạo và ghi header
+    if not os.path.exists(file_name):
+        with open(file_name, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
                 "datetime", "city",
                 "temp", "humidity", "weather", "wind_speed",
                 "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
             ])
-    except FileExistsError:
-        pass
 
     # Ghi dữ liệu mới
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+    with open(file_name, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         for city, coords in CITIES.items():
             weather = get_weather(coords["lat"], coords["lon"])
@@ -85,9 +84,8 @@ def crawl_and_save():
             ]
             writer.writerow(row)
 
-        # Thêm 1 dòng trống sau mỗi lần crawl để tách dữ liệu
-        writer.writerow([])
+    print(f"✅ Dữ liệu đã lưu vào {file_name}")
 
+# 🚀 Chạy chương trình
 if __name__ == "__main__":
     crawl_and_save()
-    print(f"✅ Dữ liệu đã được lưu vào {CSV_FILE}")
