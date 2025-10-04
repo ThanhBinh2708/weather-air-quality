@@ -23,12 +23,14 @@ jobs:
 
       - name: Run script
         run: python weather_air_quality.py
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}   # 🔑 truyền secret vào Python
 
       - name: Upload weather data CSV
         uses: actions/upload-artifact@v4
         with:
           name: weather-data
-          path: weather_air_quality.csv
+          path: weather_air_quality_*.csv   # mỗi lần crawl tạo file mới theo ngày
 
       - name: Delete old CSV after upload
-        run: rm -f weather_air_quality.csv
+        run: rm -f weather_air_quality_*.csv
