@@ -1,35 +1,34 @@
-name: Weather and Air Quality Crawler
+name: Weather Data Crawl
 
 on:
   schedule:
-    - cron: '0 */2 * * *'   # chạy mỗi 2 giờ (UTC)
+    - cron: "0 */2 * * *"   # chạy mỗi 2 giờ
   workflow_dispatch:
 
 jobs:
-  run-script:
+  crawl:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
 
-    - name: Install dependencies
-      run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-    - name: Run script
-      env:
-        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-      run: python weather_air_quality.py
+      - name: Run script
+        run: python weather_air_quality.py
 
-    - name: Commit & push CSV
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add weather_air_quality.csv
-        git commit -m "Update weather data [skip ci]" || echo "No changes to commit"
-        git push
+      - name: Upload weather data CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: weather-data
+          path: weather_air_quality.csv   # file CSV của bạn
+
+      - name: Delete old CSV after upload
+        run: rm -f weather_air_quality.csv
