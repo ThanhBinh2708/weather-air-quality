@@ -14,6 +14,9 @@ CITIES = {
     "Danang": {"lat": 16.0544, "lon": 108.2022},
 }
 
+# 📂 Tên file CSV (luôn tạo mới ở chế độ reset)
+CSV_FILE = "weather_air_quality.csv"
+
 # 📡 Hàm lấy dữ liệu thời tiết
 def get_weather(lat, lon):
     try:
@@ -51,28 +54,20 @@ def get_air_quality(lat, lon):
         return {"aqi": "N/A", "co": "N/A", "no": "N/A", "no2": "N/A", "o3": "N/A",
                 "so2": "N/A", "pm2_5": "N/A", "pm10": "N/A"}
 
-# 📝 Hàm crawl và lưu dữ liệu
+# 📝 Crawl và lưu dữ liệu
 def crawl_and_save():
-    # Thời gian hiện tại (theo giờ VN)
-    now = datetime.utcnow() + timedelta(hours=7)
-    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+    # Lấy thời gian hiện tại (UTC+7)
+    timestamp = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
 
-    # 📂 File lưu theo ngày
-    file_name = f"weather_air_quality_{now.strftime('%Y-%m-%d')}.csv"
-
-    # Nếu file chưa tồn tại → tạo và ghi header
-    if not os.path.exists(file_name):
-        with open(file_name, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "datetime", "city",
-                "temp", "humidity", "weather", "wind_speed",
-                "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
-            ])
-
-    # Ghi dữ liệu mới
-    with open(file_name, "a", newline="", encoding="utf-8") as f:
+    # Luôn tạo file mới với header
+    with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
+        writer.writerow([
+            "datetime", "city",
+            "temp", "humidity", "weather", "wind_speed",
+            "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
+        ])
+
         for city, coords in CITIES.items():
             weather = get_weather(coords["lat"], coords["lon"])
             air = get_air_quality(coords["lat"], coords["lon"])
@@ -84,8 +79,7 @@ def crawl_and_save():
             ]
             writer.writerow(row)
 
-    print(f"✅ Dữ liệu đã lưu vào {file_name}")
+    print(f"✅ Dữ liệu đã được lưu vào {CSV_FILE}")
 
-# 🚀 Chạy chương trình
 if __name__ == "__main__":
     crawl_and_save()
