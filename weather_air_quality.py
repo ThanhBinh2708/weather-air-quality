@@ -3,16 +3,19 @@ import csv
 import os
 from datetime import datetime, timedelta
 
-# 🔑 Lấy API key từ GitHub Secrets
+# 🔑 Lấy API Key từ GitHub Secrets
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 if not API_KEY:
-    raise ValueError("❌ OPENWEATHER_API_KEY chưa được thiết lập trong GitHub Secrets!")
+    raise ValueError("❌ OPENWEATHER_API_KEY chưa được thiết lập trong môi trường!")
 
-# 🌍 Danh sách thành phố
+# 🌍 Thành phố cần lấy dữ liệu
 CITIES = {
     "Hanoi": {"lat": 21.0285, "lon": 105.8542},
     "Danang": {"lat": 16.0544, "lon": 108.2022},
 }
+
+# 📂 File CSV duy nhất trong repo
+CSV_FILE = "weather_air_quality.csv"
 
 def get_weather(lat, lon):
     try:
@@ -52,31 +55,30 @@ def get_air_quality(lat, lon):
                 "so2": "N/A", "pm2_5": "N/A", "pm10": "N/A"}
 
 def crawl_and_save():
-    # 🕒 Thời gian hiện tại (UTC+7)
-    now = datetime.utcnow() + timedelta(hours=7)
-    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+    # 🕒 Lấy timestamp (giờ Việt Nam)
+    timestamp = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
 
-    # 🗓️ Tạo file mới cho mỗi ngày
-    CSV_FILE = f"weather_air_quality_{now.strftime('%Y-%m-%d')}.csv"
-
-    # Kiểm tra file tồn tại chưa
-    file_exists = os.path.isfile(CSV_FILE)
-
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-
-        # Ghi header nếu file mới
-        if not file_exists:
+    # 🔍 Nếu file chưa có thì tạo và thêm header
+    if not os.path.exists(CSV_FILE):
+        with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
             writer.writerow([
                 "datetime", "city",
                 "temp", "humidity", "weather", "wind_speed",
                 "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
             ])
 
-        # Ghi dữ liệu cho từng thành phố
+    # ✏️ Append dữ liệu mới
+    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        # 👉 Thêm 2 dòng trống để tách block dữ liệu giữa các lần crawl
+        writer.writerow([])
+        writer.writerow([])
+
         for city, coords in CITIES.items():
             weather = get_weather(coords["lat"], coords["lon"])
             air = get_air_quality(coords["lat"], coords["lon"])
+
             row = [
                 timestamp, city,
                 weather["temp"], weather["humidity"], weather["weather"], weather["wind_speed"],
@@ -84,7 +86,7 @@ def crawl_and_save():
             ]
             writer.writerow(row)
 
-    print(f"✅ Appended data to {CSV_FILE}")
+    print(f"✅ Đã append dữ liệu mới vào {CSV_FILE} lúc {timestamp}")
 
 if __name__ == "__main__":
     crawl_and_save()
