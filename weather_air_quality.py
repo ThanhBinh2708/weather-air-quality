@@ -3,18 +3,16 @@ import csv
 import os
 from datetime import datetime, timedelta
 
+# 🔑 Lấy API key từ GitHub Secrets
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 if not API_KEY:
     raise ValueError("❌ OPENWEATHER_API_KEY chưa được thiết lập trong GitHub Secrets!")
 
+# 🌍 Danh sách thành phố
 CITIES = {
     "Hanoi": {"lat": 21.0285, "lon": 105.8542},
     "Danang": {"lat": 16.0544, "lon": 108.2022},
 }
-
-# reset mode: file mới theo ngày
-today = datetime.utcnow() + timedelta(hours=7)
-CSV_FILE = f"weather_air_quality_{today.strftime('%Y-%m-%d')}.csv"
 
 def get_weather(lat, lon):
     try:
@@ -54,16 +52,28 @@ def get_air_quality(lat, lon):
                 "so2": "N/A", "pm2_5": "N/A", "pm10": "N/A"}
 
 def crawl_and_save():
-    timestamp = today.strftime("%Y-%m-%d %H:%M:%S")
+    # 🕒 Thời gian hiện tại (UTC+7)
+    now = datetime.utcnow() + timedelta(hours=7)
+    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
-    with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
+    # 🗓️ Tạo file mới cho mỗi ngày
+    CSV_FILE = f"weather_air_quality_{now.strftime('%Y-%m-%d')}.csv"
+
+    # Kiểm tra file tồn tại chưa
+    file_exists = os.path.isfile(CSV_FILE)
+
+    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "datetime", "city",
-            "temp", "humidity", "weather", "wind_speed",
-            "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
-        ])
 
+        # Ghi header nếu file mới
+        if not file_exists:
+            writer.writerow([
+                "datetime", "city",
+                "temp", "humidity", "weather", "wind_speed",
+                "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
+            ])
+
+        # Ghi dữ liệu cho từng thành phố
         for city, coords in CITIES.items():
             weather = get_weather(coords["lat"], coords["lon"])
             air = get_air_quality(coords["lat"], coords["lon"])
@@ -74,7 +84,7 @@ def crawl_and_save():
             ]
             writer.writerow(row)
 
-    print(f"✅ Saved {CSV_FILE}")
+    print(f"✅ Appended data to {CSV_FILE}")
 
 if __name__ == "__main__":
     crawl_and_save()
