@@ -1,36 +1,52 @@
-name: Weather Data Crawl
+# 🌤️ Tên của workflow — hiển thị trong tab "Actions" của GitHub
+name: 🌤️ Weather Data Crawl
 
 on:
+  # ⏰ Thiết lập lịch chạy tự động bằng cron
+  # Ở đây: "0 */2 * * *" nghĩa là chạy mỗi 2 giờ (vào phút 0)
   schedule:
-    - cron: "0 */2 * * *"   # chạy mỗi 2 giờ
-  workflow_dispatch:        # có thể chạy thủ công từ GitHub
+    - cron: "0 */2 * * *"
+
+  # 👇 Cho phép bạn chạy thủ công từ tab "Actions" trên GitHub nếu cần
+  workflow_dispatch:
 
 jobs:
   crawl:
+    # 🖥️ Chạy trên máy ảo Ubuntu mới nhất
     runs-on: ubuntu-latest
 
     steps:
+      # 🧩 Bước 1: Lấy toàn bộ code trong repository về máy ảo
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 🐍 Bước 2: Cài đặt môi trường Python (ở đây là phiên bản 3.10)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
+      # 📦 Bước 3: Cài đặt các thư viện cần thiết từ file requirements.txt
+      # (nếu bạn có file này, ví dụ chứa requests, pandas, v.v.)
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run script
+      # ☁️ Bước 4: Chạy file Python crawl dữ liệu thời tiết và chất lượng không khí
+      - name: Run crawl script
         run: python weather_air_quality.py
         env:
-          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}   # 🔑 truyền secret vào Python
+          # 🔑 Truyền biến môi trường (API Key) từ GitHub Secrets
+          # Giá trị này KHÔNG hiển thị công khai — an toàn cho API key của bạn
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
 
-      - name: Upload weather data CSV
+      # 📤 Bước 5: Upload file CSV (artifact) sau khi crawl xong
+      - name: Upload daily weather data
         uses: actions/upload-artifact@v4
         with:
-          name: weather-data
-          path: weather_air_quality_*.csv   # mỗi lần crawl tạo file mới theo ngày
+          # 🏷️ Đặt tên cho artifact, có thêm ID của lần chạy để tránh trùng
+          name: weather-data-${{ github.run_id }}
+          
+          # 📂 Đường dẫn file CSV cần upload (file theo từng ngày)
+          path: weather_air_quality_*.csv
 
-      - name: Delete old CSV after upload
-        run: rm -f weather_air_quality_*.csv
+    
