@@ -2,7 +2,7 @@ name: 🌤️ Weather Data Crawl
 
 on:
   schedule:
-    - cron: "0 */2 * * *"   # chạy mỗi 2 giờ (00:00, 02:00, 04:00, ...)
+    - cron: "0 * * * *"   # chạy mỗi 1 giờ (00:00, 02:00, 04:00, ...)
   workflow_dispatch:         # có thể chạy thủ công
 
 jobs:
