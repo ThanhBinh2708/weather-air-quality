@@ -4,73 +4,107 @@ import psycopg2
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-# 🔑 Tải biến môi trường từ GitHub Secrets (hoặc từ .env khi chạy local)
+# Load secrets (GitHub Actions inject, .env dùng khi chạy local)
 load_dotenv()
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
-SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")  # ✅ tên phải trùng với Secrets
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")  # phải trùng tên với Secrets
 
-# 🕒 Thiết lập múi giờ Việt Nam
 VN_TZ_OFFSET = 7  # UTC+7
 
-# 🌍 Danh sách thành phố cần crawl
 CITIES = {
     "Hanoi": {"lat": 21.0285, "lon": 105.8542},
-    "Danang": {"lat": 16.0678, "lon": 108.2208}
+    "Danang": {"lat": 16.0678, "lon": 108.2208},
 }
 
-# 🕐 Hàm chuyển UTC → giờ Việt Nam
 def to_vietnam_time(utc_ts: datetime):
     return utc_ts + timedelta(hours=VN_TZ_OFFSET)
 
-# 🌤️ Hàm lấy dữ liệu thời tiết
 def get_weather(lat, lon):
-    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
-    res = requests.get(url)
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    res = requests.get(url, params={"lat": lat, "lon": lon, "appid": OPENWEATHER_API_KEY, "units": "metric"}, timeout=30)
     res.raise_for_status()
-    data = res.json()
+    d = res.json()
     return {
-        "temp": data["main"]["temp"],
-        "humidity": data["main"]["humidity"],
-        "weather": data["weather"][0]["main"],
-        "wind_speed": data["wind"]["speed"]
+        "temp": d["main"]["temp"],
+        "humidity": d["main"]["humidity"],
+        "weather": d["weather"][0]["main"],
+        "wind_speed": d["wind"]["speed"],
     }
 
-# 🌫️ Hàm lấy dữ liệu chất lượng không khí
 def get_air_quality(lat, lon):
-    url = f"https://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}"
-    res = requests.get(url)
+    url = "https://api.openweathermap.org/data/2.5/air_pollution"
+    res = requests.get(url, params={"lat": lat, "lon": lon, "appid": OPENWEATHER_API_KEY}, timeout=30)
     res.raise_for_status()
     item = res.json()["list"][0]
+    c = item["components"]
     return {
         "aqi": item["main"]["aqi"],
-        "co": item["components"]["co"],
-        "no": item["components"]["no"],
-        "no2": item["components"]["no2"],
-        "o3": item["components"]["o3"],
-        "so2": item["components"]["so2"],
-        "pm2_5": item["components"]["pm2_5"],
-        "pm10": item["components"]["pm10"],
+        "co": c["co"],
+        "no": c["no"],
+        "no2": c["no2"],
+        "o3": c["o3"],
+        "so2": c["so2"],
+        "pm2_5": c["pm2_5"],
+        "pm10": c["pm10"],
     }
 
-# 📊 Ghi dữ liệu trực tiếp vào Supabase
 def save_to_db(city, weather, air):
-    # ✅ Kết nối tới database Supabase
+    if not SUPABASE_DB_URL:
+        raise RuntimeError("SUPABASE_DB_URL is empty. Check GitHub Secrets & workflow env mapping.")
+
     conn = psycopg2.connect(SUPABASE_DB_URL)
     cur = conn.cursor()
 
-    # ⏱️ Timestamp theo giờ Việt Nam
+    # Log xác nhận DB
+    cur.execute("SELECT current_database(), current_user;")
+    print("📡 Connected to:", cur.fetchone())
+
     ts_vn = to_vietnam_time(datetime.utcnow())
 
-    # 🏙️ Kiểm tra / tạo city_id
-    cur.execute("SELECT city_id FROM Cities WHERE city_name = %s;", (city,))
-    result = cur.fetchone()
-    if result:
-        city_id = result[0]
-    else:
-        cur.execute("INSERT INTO Cities (city_name) VALUES (%s) RETURNING city_id;", (city,))
-        city_id = cur.fetchone()[0]
+    # Upsert city
+    cur.execute(
+        """
+        INSERT INTO Cities (city_name, latitude, longitude)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (city_name) DO UPDATE
+        SET latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude
+        RETURNING city_id;
+        """,
+        (city, CITIES[city]["lat"], CITIES[city]["lon"]),
+    )
+    city_id = cur.fetchone()[0]
 
-    # ☁️ Ghi dữ liệu thời tiết
-    cur.execute("""
-        INSERT INTO WeatherData
+    # Insert weather (avoid dup by unique(city_id, ts))
+    cur.execute(
+        """
+        INSERT INTO WeatherData (city_id, ts, temp, humidity, weather, wind_speed)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (city_id, ts) DO NOTHING;
+        """,
+        (city_id, ts_vn, weather["temp"], weather["humidity"], weather["weather"], weather["wind_speed"]),
+    )
+
+    # Insert air quality (avoid dup)
+    cur.execute(
+        """
+        INSERT INTO AirQualityData (city_id, ts, aqi, co, no, no2, o3, so2, pm2_5, pm10)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (city_id, ts) DO NOTHING;
+        """,
+        (city_id, ts_vn, air["aqi"], air["co"], air["no"], air["no2"], air["o3"], air["so2"], air["pm2_5"], air["pm10"]),
+    )
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"✅ Đã lưu dữ liệu cho {city} lúc {ts_vn}")
+
+if __name__ == "__main__":
+    for city, info in CITIES.items():
+        try:
+            w = get_weather(info["lat"], info["lon"])
+            a = get_air_quality(info["lat"], info["lon"])
+            save_to_db(city, w, a)
+        except Exception as e:
+            print(f"❌ Lỗi với {city}: {e}")
