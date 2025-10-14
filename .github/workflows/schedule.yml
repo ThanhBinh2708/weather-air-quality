@@ -2,7 +2,7 @@ name: ☁️ Weather & Air Quality Data Crawler
 
 on:
   schedule:
-    - cron: "0 * * * *"   # Chạy mỗi 2 giờ
+    - cron: "0 * * * *"   # Chạy mỗi 1 giờ
   workflow_dispatch:         # Có thể chạy thủ công từ GitHub
 
 jobs:
@@ -26,4 +26,5 @@ jobs:
         run: python weather_air_quality.py
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DB_URL: ${{ secrets.DB_URL }}
+
