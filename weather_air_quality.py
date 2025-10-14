@@ -1,92 +1,104 @@
-import requests
-import csv
 import os
+import requests
+import psycopg2
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 
-# 🔑 Lấy API Key từ GitHub Secrets
-API_KEY = os.getenv("OPENWEATHER_API_KEY")
-if not API_KEY:
-    raise ValueError("❌ OPENWEATHER_API_KEY chưa được thiết lập trong môi trường!")
+# 🔑 Tải biến môi trường từ Secrets (.env nếu chạy local)
+load_dotenv()
 
-# 🌍 Thành phố cần lấy dữ liệu
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")  # Dạng: postgresql://user:pass@host:port/db
+
+# 🕒 Thiết lập múi giờ Việt Nam
+VN_TZ_OFFSET = 7  # UTC+7
+
+# 🌍 Danh sách thành phố
 CITIES = {
     "Hanoi": {"lat": 21.0285, "lon": 105.8542},
-    "Danang": {"lat": 16.0544, "lon": 108.2022},
+    "Danang": {"lat": 16.0678, "lon": 108.2208}
 }
 
-# 📂 File CSV duy nhất trong repo
-CSV_FILE = "weather_air_quality.csv"
+# 📦 Hàm chuyển giờ UTC → giờ Việt Nam
+def to_vietnam_time(utc_ts: datetime):
+    return utc_ts + timedelta(hours=VN_TZ_OFFSET)
 
+# 🌤️ Hàm lấy dữ liệu thời tiết
 def get_weather(lat, lon):
-    try:
-        url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
-        res = requests.get(url)
-        res.raise_for_status()
-        data = res.json()
-        return {
-            "temp": data["main"]["temp"],
-            "humidity": data["main"]["humidity"],
-            "weather": data["weather"][0]["main"],
-            "wind_speed": data["wind"]["speed"],
-        }
-    except Exception as e:
-        print("⚠️ Weather API error:", e)
-        return {"temp": "N/A", "humidity": "N/A", "weather": "N/A", "wind_speed": "N/A"}
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
+    res = requests.get(url)
+    res.raise_for_status()
+    data = res.json()
+    return {
+        "temp": data["main"]["temp"],
+        "humidity": data["main"]["humidity"],
+        "weather": data["weather"][0]["main"],
+        "wind_speed": data["wind"]["speed"]
+    }
 
+# 🌫️ Hàm lấy dữ liệu chất lượng không khí
 def get_air_quality(lat, lon):
-    try:
-        url = f"http://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={API_KEY}"
-        res = requests.get(url)
-        res.raise_for_status()
-        data = res.json()["list"][0]
-        return {
-            "aqi": data["main"]["aqi"],
-            "co": data["components"]["co"],
-            "no": data["components"]["no"],
-            "no2": data["components"]["no2"],
-            "o3": data["components"]["o3"],
-            "so2": data["components"]["so2"],
-            "pm2_5": data["components"]["pm2_5"],
-            "pm10": data["components"]["pm10"],
-        }
-    except Exception as e:
-        print("⚠️ Air API error:", e)
-        return {"aqi": "N/A", "co": "N/A", "no": "N/A", "no2": "N/A", "o3": "N/A",
-                "so2": "N/A", "pm2_5": "N/A", "pm10": "N/A"}
+    url = f"https://api.openweathermap.org/data/2.5/air_pollution?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}"
+    res = requests.get(url)
+    res.raise_for_status()
+    data = res.json()["list"][0]["components"]
+    aqi = res.json()["list"][0]["main"]["aqi"]
+    return {
+        "aqi": aqi,
+        "co": data["co"],
+        "no": data["no"],
+        "no2": data["no2"],
+        "o3": data["o3"],
+        "so2": data["so2"],
+        "pm2_5": data["pm2_5"],
+        "pm10": data["pm10"]
+    }
 
-def crawl_and_save():
-    # 🕒 Lấy timestamp (giờ Việt Nam)
-    timestamp = (datetime.utcnow() + timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
+# 📊 Ghi dữ liệu trực tiếp vào Supabase
+def save_to_db(city, weather, air):
+    conn = psycopg2.connect(SUPABASE_DB_URL)
+    cur = conn.cursor()
 
-    # 🔍 Nếu file chưa có thì tạo và thêm header
-    if not os.path.exists(CSV_FILE):
-        with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                "datetime", "city",
-                "temp", "humidity", "weather", "wind_speed",
-                "aqi", "co", "no", "no2", "o3", "so2", "pm2_5", "pm10"
-            ])
+    # ⏱️ Timestamp giờ Việt Nam
+    ts_vn = to_vietnam_time(datetime.utcnow())
 
-    # ✏️ Append dữ liệu mới
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        # 👉 Thêm 2 dòng trống để tách block dữ liệu giữa các lần crawl
-        writer.writerow([])
-        writer.writerow([])
+    # 🏙️ Lấy city_id từ bảng Cities
+    cur.execute("SELECT city_id FROM Cities WHERE city_name = %s;", (city,))
+    result = cur.fetchone()
+    if result:
+        city_id = result[0]
+    else:
+        cur.execute("INSERT INTO Cities (city_name) VALUES (%s) RETURNING city_id;", (city,))
+        city_id = cur.fetchone()[0]
 
-        for city, coords in CITIES.items():
-            weather = get_weather(coords["lat"], coords["lon"])
-            air = get_air_quality(coords["lat"], coords["lon"])
+    # ☁️ Ghi vào WeatherData
+    cur.execute("""
+        INSERT INTO WeatherData (city_id, ts, temp, humidity, weather, wind_speed)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON CONFLICT (city_id, ts) DO NOTHING;
+    """, (city_id, ts_vn, weather["temp"], weather["humidity"], weather["weather"], weather["wind_speed"]))
 
-            row = [
-                timestamp, city,
-                weather["temp"], weather["humidity"], weather["weather"], weather["wind_speed"],
-                air["aqi"], air["co"], air["no"], air["no2"], air["o3"], air["so2"], air["pm2_5"], air["pm10"]
-            ]
-            writer.writerow(row)
+    # 💨 Ghi vào AirQualityData
+    cur.execute("""
+        INSERT INTO AirQualityData (city_id, ts, aqi, co, no, no2, o3, so2, pm2_5, pm10)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (city_id, ts) DO NOTHING;
+    """, (
+        city_id, ts_vn, air["aqi"], air["co"], air["no"], air["no2"],
+        air["o3"], air["so2"], air["pm2_5"], air["pm10"]
+    ))
 
-    print(f"✅ Đã append dữ liệu mới vào {CSV_FILE} lúc {timestamp}")
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"✅ Dữ liệu đã lưu vào DB cho {city} lúc {ts_vn}")
 
+# 🚀 Main
 if __name__ == "__main__":
-    crawl_and_save()
+    for city, info in CITIES.items():
+        try:
+            weather = get_weather(info["lat"], info["lon"])
+            air = get_air_quality(info["lat"], info["lon"])
+            save_to_db(city, weather, air)
+        except Exception as e:
+            print(f"❌ Lỗi với {city}: {e}")
