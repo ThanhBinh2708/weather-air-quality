@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
-SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")  # Dạng: postgresql://user:pass@host:port/db
+SUPABASE_DB_URL = os.getenv("DB_URL")  # Dạng: postgresql://user:pass@host:port/db
 
 # 🕒 Thiết lập múi giờ Việt Nam
 VN_TZ_OFFSET = 7  # UTC+7
