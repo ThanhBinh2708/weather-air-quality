@@ -23,7 +23,9 @@ CITIES = {
 # 🕒 3️⃣ Hàm lấy thời gian hiện tại theo giờ Việt Nam
 def vn_time():
     tz = pytz.timezone("Asia/Ho_Chi_Minh")
-    return datetime.now(tz).replace(second=0, microsecond=0)
+    now_vn = datetime.now(tz).replace(second=0, microsecond=0)
+    return now_vn.replace(tzinfo=None)  # loại bỏ tzinfo để PostgreSQL lưu đúng
+
 
 # ☁️ 4️⃣ Hàm lấy dữ liệu thời tiết
 def get_weather(lat, lon):
