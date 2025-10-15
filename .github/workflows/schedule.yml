@@ -2,8 +2,8 @@ name: ☁️ Weather & Air Quality Data Crawler
 
 on:
   schedule:
-    - cron: "0 * * * *"      # chạy mỗi 1 giờ
-  workflow_dispatch:
+    - cron: "0 * * * *"   # chạy mỗi 1 giờ
+  workflow_dispatch:       # có thể chạy thủ công
 
 jobs:
   crawl:
@@ -21,9 +21,10 @@ jobs:
       - name: 📦 Install dependencies
         run: |
           pip install -r requirements.txt
+          pip install psycopg2-binary requests python-dotenv
 
       - name: ☁️ Run data crawler and push to Supabase
         run: python weather_air_quality.py
         env:
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}   # trùng tên với code
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
