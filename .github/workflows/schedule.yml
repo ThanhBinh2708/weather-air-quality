@@ -1,12 +1,12 @@
-name: ☁️ Auto Push Weather & Air Quality Data
+name: ☁️ Weather & Air Quality Data Crawler
 
 on:
   schedule:
-    - cron: "0 * * * *"   # chạy mỗi 1 giờ
-  workflow_dispatch:       # có thể chạy thủ công từ GitHub
+    - cron: "0 * * * *"      # chạy mỗi 1 giờ
+  workflow_dispatch:
 
 jobs:
-  push-data:
+  crawl:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,10 +20,10 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          pip install requests psycopg2-binary python-dotenv
+          pip install -r requirements.txt
 
-      - name: ☁️ Push data to Supabase
-        run: python push_data_supabase.py
+      - name: ☁️ Run weather crawler and push to Supabase
+        run: python weather_air_quality.py
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
