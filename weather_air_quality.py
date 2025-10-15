@@ -4,11 +4,11 @@ import psycopg2
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-# Load secrets (GitHub Actions inject, .env dùng khi chạy local)
+# ✅ Load biến môi trường từ GitHub Secrets hoặc file .env (khi chạy local)
 load_dotenv()
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
-SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")  # phải trùng tên với Secrets
+SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL")
 
 VN_TZ_OFFSET = 7  # UTC+7
 
@@ -20,9 +20,15 @@ CITIES = {
 def to_vietnam_time(utc_ts: datetime):
     return utc_ts + timedelta(hours=VN_TZ_OFFSET)
 
+# ✅ Hàm lấy thời tiết
 def get_weather(lat, lon):
     url = "https://api.openweathermap.org/data/2.5/weather"
-    res = requests.get(url, params={"lat": lat, "lon": lon, "appid": OPENWEATHER_API_KEY, "units": "metric"}, timeout=30)
+    res = requests.get(url, params={
+        "lat": lat,
+        "lon": lon,
+        "appid": OPENWEATHER_API_KEY,
+        "units": "metric"
+    }, timeout=30)
     res.raise_for_status()
     d = res.json()
     return {
@@ -32,9 +38,14 @@ def get_weather(lat, lon):
         "wind_speed": d["wind"]["speed"],
     }
 
+# ✅ Hàm lấy chất lượng không khí
 def get_air_quality(lat, lon):
     url = "https://api.openweathermap.org/data/2.5/air_pollution"
-    res = requests.get(url, params={"lat": lat, "lon": lon, "appid": OPENWEATHER_API_KEY}, timeout=30)
+    res = requests.get(url, params={
+        "lat": lat,
+        "lon": lon,
+        "appid": OPENWEATHER_API_KEY
+    }, timeout=30)
     res.raise_for_status()
     item = res.json()["list"][0]
     c = item["components"]
@@ -49,20 +60,22 @@ def get_air_quality(lat, lon):
         "pm10": c["pm10"],
     }
 
+# ✅ Hàm lưu dữ liệu vào Supabase
 def save_to_db(city, weather, air):
     if not SUPABASE_DB_URL:
-        raise RuntimeError("SUPABASE_DB_URL is empty. Check GitHub Secrets & workflow env mapping.")
+        raise RuntimeError("❌ SUPABASE_DB_URL is empty. Check GitHub Secrets!")
 
+    # ✅ Kết nối đến Supabase
     conn = psycopg2.connect(SUPABASE_DB_URL)
     cur = conn.cursor()
-
-    # Log xác nhận DB
     cur.execute("SELECT current_database(), current_user;")
     print("📡 Connected to:", cur.fetchone())
 
-    ts_vn = to_vietnam_time(datetime.utcnow())
+    # ✅ Dùng thời gian chính xác để tránh trùng ts
+    ts_vn = to_vietnam_time(datetime.utcnow()).replace(microsecond=0)
+    print(f"🕒 Timestamp VN: {ts_vn}")
 
-    # Upsert city
+    # ✅ Upsert city
     cur.execute(
         """
         INSERT INTO Cities (city_name, latitude, longitude)
@@ -74,8 +87,9 @@ def save_to_db(city, weather, air):
         (city, CITIES[city]["lat"], CITIES[city]["lon"]),
     )
     city_id = cur.fetchone()[0]
+    print(f"🏙️ City ID for {city}: {city_id}")
 
-    # Insert weather (avoid dup by unique(city_id, ts))
+    # ✅ Insert weather
     cur.execute(
         """
         INSERT INTO WeatherData (city_id, ts, temp, humidity, weather, wind_speed)
@@ -84,8 +98,9 @@ def save_to_db(city, weather, air):
         """,
         (city_id, ts_vn, weather["temp"], weather["humidity"], weather["weather"], weather["wind_speed"]),
     )
+    print(f"🌦️ Weather inserted for {city}")
 
-    # Insert air quality (avoid dup)
+    # ✅ Insert air quality
     cur.execute(
         """
         INSERT INTO AirQualityData (city_id, ts, aqi, co, no, no2, o3, so2, pm2_5, pm10)
@@ -94,17 +109,22 @@ def save_to_db(city, weather, air):
         """,
         (city_id, ts_vn, air["aqi"], air["co"], air["no"], air["no2"], air["o3"], air["so2"], air["pm2_5"], air["pm10"]),
     )
+    print(f"💨 Air Quality inserted for {city}")
 
     conn.commit()
     cur.close()
     conn.close()
-    print(f"✅ Đã lưu dữ liệu cho {city} lúc {ts_vn}")
+    print(f"✅ Đã lưu dữ liệu cho {city} lúc {ts_vn}\n")
 
+# ✅ Main
 if __name__ == "__main__":
     for city, info in CITIES.items():
         try:
+            print(f"🚀 Bắt đầu thu thập dữ liệu cho {city}")
             w = get_weather(info["lat"], info["lon"])
             a = get_air_quality(info["lat"], info["lon"])
+            print("🌤️ Weather data:", w)
+            print("💨 Air quality data:", a)
             save_to_db(city, w, a)
         except Exception as e:
             print(f"❌ Lỗi với {city}: {e}")
